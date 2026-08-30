@@ -1,0 +1,62 @@
+# KPI Contract — governed semantics.
+# Every pipeline stage reads definitions from here instead of hardcoding
+# assumptions, so the "why" of a threshold/grain choice is always traceable.
+
+kpis:
+  revenue:
+    definition: "price * volume, summed at the requested grain"
+    grain_options: ["region", "store", "sku"]
+    source_table: "sales.csv"
+    refresh_cadence: "daily"
+    materiality_zscore_threshold: 1.5   # STATISTICAL test: flag if deviation exceeds this many robust std devs
+    materiality_min_pct_change: 5.0     # BUSINESS test: AND the change must be at least this % to matter
+    # Materiality requires BOTH tests to pass — a statistically real but tiny
+    # move (e.g. -2.7%) is not worth an investigation; a large move that's
+    # within normal noise for a volatile segment also isn't. See docs/architecture.md.
+    min_history_days_for_confidence: 14  # below this -> sparse-history warning
+    owner: "Regional Finance"
+    drivers: ["units_sold", "marketing_spend", "inventory_level"]  # the other KPIs this one is explained by
+
+  units_sold:
+    definition: "sum of volume at the requested grain"
+    grain_options: ["region", "store", "sku"]
+    source_table: "sales.csv"
+    refresh_cadence: "daily"
+    owner: "Regional Ops"
+
+  marketing_spend:
+    definition: "weekly spend by region"
+    grain_options: ["region"]
+    source_table: "promo.csv"
+    refresh_cadence: "weekly"        # coarser grain than revenue/units_sold, on purpose
+    owner: "Marketing Ops"
+
+  inventory_level:
+    definition: "stock on hand by store and SKU, as of the last inventory snapshot"
+    grain_options: ["region", "store", "sku"]
+    source_table: "inventory.csv"
+    refresh_cadence: "batch, ~every 3 days (irregular)"   # not even a fixed cadence
+    near_zero_threshold: 15          # stock below this counts as an effective stockout
+    owner: "Supply Chain"
+
+access_control:
+  roles:
+    regional_ops_manager:
+      can_view_grains: ["region", "store", "sku"]
+      hidden_fields: ["price"]         # sees volume/ops detail, not pricing strategy
+      narrative_focus: "operational — what to fix, where, this week"
+    cfo:
+      can_view_grains: ["region"]
+      hidden_fields: []
+      narrative_focus: "financial impact, trend vs. blip, monitoring"
+
+confidence_bands:
+  # Derived empirically by utils/calibration.py against a labeled synthetic
+  # validation set — see docs/calibration_results.md for the full
+  # precision-coverage table these numbers come from. Re-run that script
+  # and update these values whenever engine/confidence.py's scoring changes
+  # (last recalibrated after fixing the plausibility double-counting issue
+  # and switching plausibility to a multiplicative gate).
+  high: 0.70     # score >= this -> confident single explanation (precision 1.0 @ coverage 0.33 in calibration)
+  medium: 0.50   # score >= this -> present as leading hypothesis with caveat (precision 0.85 @ coverage 0.54)
+  # below medium -> abstain, show top 2-3 hypotheses instead of one answer

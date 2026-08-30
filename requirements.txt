@@ -1,0 +1,8 @@
+pandas
+numpy
+scikit-learn
+statsmodels
+pyyaml
+streamlit
+google-genai
+pytest

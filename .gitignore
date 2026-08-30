@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+.streamlit/secrets.toml
+
+# Generated data (regenerate via utils/data_generator.py)
+data/*.csv
+data/docs/*.txt
+
+# OS
+.DS_Store
+Thumbs.db
